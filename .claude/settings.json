@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Bash(pnpm:*)",
+      "Bash(git:*)"
+    ],
+    "deny": [
+      "Write(.env*)",
+      "Write(*.local.*)"
+    ]
+  }
+}

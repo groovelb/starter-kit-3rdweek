@@ -1,0 +1,139 @@
+---
+description: Cursor와 Claude Code 간 룰 동기화 프로토콜. 룰 추가/수정/삭제 시 참고.
+globs:
+alwaysApply: false
+---
+# Cursor-Claude 룰 동기화 프로토콜
+
+## 원칙
+
+**Single Source of Truth**: `.cursor/rules/*.mdc` 파일이 유일한 원본이다.
+Claude Code는 이 원본을 참조하여 동일한 규칙을 따른다.
+
+## 파일 구조
+
+```
+프로젝트/
+├── CLAUDE.md                    # Claude용 라우터 (@ 참조)
+├── CLAUDE.local.md              # 개인용 (gitignore)
+├── .claude/
+│   ├── settings.json            # 팀 공유 설정 (git 커밋)
+│   └── settings.local.json      # 개인 설정 (gitignore)
+└── .cursor/
+    └── rules/*.mdc              # 원본 (Single Source of Truth)
+```
+
+## CLAUDE.md 역할
+
+CLAUDE.md는 **라우터** 역할만 수행한다:
+1. `.cursor/rules/*.mdc` 파일들을 @ 참조로 포함
+2. Claude 전용 메타 지시문 (규칙 준수 강제)
+3. Claude 전용 워크플로 정의
+4. Common Commands, Key Directories
+
+## CLAUDE.md 구조
+
+```markdown
+# Project Rules
+
+## META INSTRUCTION
+IMPORTANT: 참조된 모든 규칙은 프로젝트 법률이다.
+YOU MUST 규칙 위반 가능성 있으면 먼저 사용자에게 알려라.
+
+## Frontmatter 해석
+- alwaysApply: true → 무조건 적용
+- globs: "*.jsx" → 해당 패턴 파일 작업 시 적용
+
+## 규칙 원본 (우선순위 순)
+@.cursor/rules/project-summary.mdc
+@.cursor/rules/code-convention.mdc
+...
+
+## Key Directories
+- src/components/ – UI 컴포넌트
+- src/stories/ – Storybook 스토리
+
+## Common Commands
+pnpm dev, pnpm storybook, pnpm lint
+
+## Workflow
+(Claude 전용 작업 절차)
+```
+
+## 룰 관리 프로세스
+
+### 룰 추가
+1. `.cursor/rules/new-rule.mdc` 생성 (frontmatter 포함)
+2. `CLAUDE.md`에 `@.cursor/rules/new-rule.mdc` 한 줄 추가
+3. 커밋
+
+### 룰 수정
+1. `.cursor/rules/xxx.mdc` 수정
+2. 끝 (@ 참조이므로 Claude 자동 반영)
+3. 커밋
+
+### 룰 삭제
+1. `.cursor/rules/xxx.mdc` 삭제
+2. `CLAUDE.md`에서 해당 @ 참조 줄 삭제
+3. 커밋
+
+## .cursor/rules/*.mdc Frontmatter 규칙
+
+```yaml
+---
+description: 규칙의 목적 (Cursor가 자동 선택 시 참고)
+globs: "*.jsx,*.tsx"  # 해당 패턴 파일 작업 시만 적용
+alwaysApply: true     # true면 항상 적용, false면 조건부
+---
+```
+
+| 필드 | Cursor 동작 | Claude 해석 |
+|------|-------------|-------------|
+| alwaysApply: true | 항상 컨텍스트 포함 | 모든 작업에 적용 |
+| alwaysApply: false + globs | 패턴 매칭 시 포함 | 해당 파일 작업 시 적용 |
+| description | 자동 선택 판단 기준 | 규칙 목적 이해 |
+
+## .claude/settings.json 권장 설정
+
+```json
+{
+  "defaultMode": "plan",
+  "permissions": {
+    "allow": ["Read", "Write", "Bash(pnpm *)", "Bash(git *)"],
+    "deny": ["Write(.env*)", "Write(*.local.*)"]
+  },
+  "hooks": {
+    "afterWrite": "pnpm lint --fix {{file}}"
+  }
+}
+```
+
+- `defaultMode: "plan"` → 코드 변경 전 계획 먼저 확인
+- `permissions` → 허용/차단 명령 정의
+- `hooks.afterWrite` → 파일 수정 후 자동 린트
+
+## 세션별 규칙 강화
+
+특정 작업에 집중할 때:
+```bash
+# 보안 점검
+claude --append-system-prompt "보안 취약점 위주로 검토"
+
+# 스토리북 작업
+claude --append-system-prompt "모든 컴포넌트에 스토리 작성 필수"
+```
+
+## 규칙 우선순위
+
+| 등급 | 의미 | 예시 |
+|------|------|------|
+| CRITICAL | 절대 위반 불가 | project-summary.mdc |
+| MUST | 반드시 준수 | code-convention.mdc, design-system.mdc |
+| SHOULD | 가능하면 준수 | easy-refactoring.mdc |
+
+## 충돌 처리
+
+사용자 요청이 규칙과 충돌할 경우:
+1. 충돌 사실과 해당 규칙 알림
+2. 구체적 충돌 내용 설명
+3. 명시적 예외 허용 전까지 진행 금지

@@ -1,0 +1,60 @@
+---
+description: MUI Grid 컴포넌트 사용 규칙 (CRITICAL)
+globs: "**/*.jsx"
+alwaysApply: true
+---
+
+# MUI Grid Import 규칙 (CRITICAL - 절대 위반 금지)
+
+## ❌ 잘못된 Import (절대 사용 금지)
+```jsx
+import Grid from '@mui/material/Grid2';  // 틀림! 사용 금지!
+```
+
+## ✅ 올바른 Import (반드시 이것만 사용)
+```jsx
+import Grid from '@mui/material/Grid';   // 정확함! 이것만 사용!
+```
+
+**중요**: MUI v7에서는 `Grid2`가 아닌 `Grid`를 직접 import해야 합니다.
+
+---
+
+- Grid 컴퍼넌트의 경우 아래 코드에 명시된 import 구문과 props를 참고해줘.
+
+import * as React from 'react';
+import { styled } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Grid from '@mui/material/Grid';
+
+const Item = styled(Paper)(({ theme }) => ({
+  backgroundColor: '#fff',
+  ...theme.typography.body2,
+  padding: theme.spacing(1),
+  textAlign: 'center',
+  color: (theme.vars ?? theme).palette.text.secondary,
+  ...theme.applyStyles('dark', {
+    backgroundColor: '#1A2027',
+  }),
+}));
+
+export default function FullWidthGrid() {
+  return (
+    <Box sx={{ flexGrow: 1 }}>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 6, md: 8 }}>
+          <Item>xs=6 md=8</Item>
+        </Grid>
+        <Grid size={{ xs: 6, md: 4 }}>
+          <Item>xs=6 md=4</Item>
+        </Grid>
+        <Grid size={{ xs: 6, md: 4 }}>
+          <Item>xs=6 md=4</Item>
+        </Grid>
+        <Grid size={{ xs: 6, md: 8 }}>
+          <Item>xs=6 md=8</Item>
+        </Grid>
+      </Grid>
+    </Box>
+  );

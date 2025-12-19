@@ -1,0 +1,37 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+- ** CRITICAL ** 새로운 컴퍼넌트를 만들기 전에 반드시 기존 컴퍼넌트로 대체 가능한지 확인하고, 가능하면 최대한 재활용해줘. 불필요한 중복 컴퍼넌트 생성을 피해야 함.
+- ** CRITICAL ** 스토리북 Style 카테고리에 명시된 디자인 토큰(색상, 타이포그래피, 간격 등)과 아이콘을 우선 사용해줘. 임의의 색상값, 폰트 크기, 간격을 직접 지정하지 말고 theme 토큰을 참조할 것.
+  - 색상: `primary.main`, `secondary.main`, `grey.100` 등 theme.palette 토큰 사용
+  - 타이포그래피: `variant="h1"`, `variant="body1"` 등 theme.typography 사용
+  - 간격: `p: 2`, `m: 3`, `gap: 1` 등 theme.spacing 기반 값 사용
+  - 아이콘: lucide-react 라이브러리 아이콘 우선 사용 (`src/components/style/Icons.stories.jsx` 참고)
+- ** 중요 ** 모든 기본 컴퍼넌트는 MUI의 가장 최신버전 사용해줘.
+- ** 중요 ** 특히 Grid 컴퍼넌트의 경우 아래 코드에 명시된 import 구문과 props를 참고해줘.
+- 모든 컴퍼넌트의 스타일은 가능한 MUI의 sx 함수를 사용해줘.
+- 수정시 의존성을 줄만한 기능들을 독립된 컴퍼넌트로 모듈화를 해줘.
+- 새로운 수정, 추가사항이 있을때 지시하지 않은 기존 기능, 형태에 영향을 주지 않도록 조심해줘.
+- 특별한 의도가 없다면 구글 메터리얼 디자인의 가이드에 기반한 UX에 충실해줘.
+
+export default function FullWidthGrid() {
+  return (
+    <Box sx={{ flexGrow: 1 }}>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 6, md: 8 }}>
+          <Item>xs=6 md=8</Item>
+        </Grid>
+        <Grid size={{ xs: 6, md: 4 }}>
+          <Item>xs=6 md=4</Item>
+        </Grid>
+        <Grid size={{ xs: 6, md: 4 }}>
+          <Item>xs=6 md=4</Item>
+        </Grid>
+        <Grid size={{ xs: 6, md: 8 }}>
+          <Item>xs=6 md=8</Item>
+        </Grid>
+      </Grid>
+    </Box>
+  );
