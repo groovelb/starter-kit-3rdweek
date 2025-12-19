@@ -4,7 +4,6 @@ import {
   CheckoutLayout,
   CheckoutLogo,
   CheckoutSteps,
-  ExpressCheckout,
   ContactForm,
   ShippingForm,
   CheckoutActions,
@@ -16,7 +15,7 @@ import {
  * CheckoutTemplate 컴포넌트
  *
  * 체크아웃 페이지 템플릿. 모든 체크아웃 컴포넌트를 조합.
- * 좌측: 폼 영역 (Logo, Steps, Express, Contact, Shipping, Actions, Policy)
+ * 좌측: 폼 영역 (Logo, Steps, Contact, Shipping, Actions, Policy)
  * 우측: 주문 요약 영역 (OrderSummary)
  *
  * Props:
@@ -31,6 +30,8 @@ import {
  * @param {function} onReturn - 돌아가기 클릭 핸들러 [Optional]
  * @param {function} onContinue - 계속 버튼 클릭 핸들러 [Optional]
  * @param {function} onSignIn - 로그인 클릭 핸들러 [Optional]
+ * @param {string} continueLabel - 계속 버튼 텍스트 [Optional, 기본값: 'Checkout']
+ * @param {boolean} isLoading - 로딩 상태 [Optional, 기본값: false]
  * @param {object} sx - 추가 스타일 [Optional]
  *
  * Example usage:
@@ -55,6 +56,8 @@ const CheckoutTemplate = forwardRef(function CheckoutTemplate(
     onReturn,
     onContinue,
     onSignIn,
+    continueLabel = 'Checkout',
+    isLoading = false,
     sx = {},
     ...props
   },
@@ -65,7 +68,6 @@ const CheckoutTemplate = forwardRef(function CheckoutTemplate(
     <Box>
       <CheckoutLogo />
       <CheckoutSteps currentStep={currentStep} />
-      <ExpressCheckout />
       <ContactForm
         email={contact.email}
         newsletter={contact.newsletter}
@@ -80,6 +82,8 @@ const CheckoutTemplate = forwardRef(function CheckoutTemplate(
       <CheckoutActions
         onReturn={onReturn}
         onContinue={onContinue}
+        continueLabel={continueLabel}
+        isLoading={isLoading}
       />
       <PolicyLinks />
     </Box>
