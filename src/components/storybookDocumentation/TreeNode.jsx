@@ -63,7 +63,7 @@ export const TreeNode = ({ keyName, value, depth = 0, defaultOpen = false }) => 
             component="span"
             sx={ {
               width: 16,
-              color: 'text.secondary',
+              color: 'text.success',
               fontSize: '12px',
               fontFamily: 'monospace',
               userSelect: 'none',

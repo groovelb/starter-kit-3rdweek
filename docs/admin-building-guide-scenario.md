@@ -61,7 +61,7 @@ Phase 4: 인증 & 보안
 - [ ] Supabase Dashboard에 로그인 성공
 - [ ] Organization(조직) 화면이 보임
 
-**트러블슈팅**:
+**주의사항**:
 > **Q: GitHub 로그인이 안 돼요**
 > A: GitHub에서 Supabase OAuth 앱 권한을 확인하세요. Settings > Applications > Authorized OAuth Apps
 
@@ -166,7 +166,7 @@ VITE_USE_SUPABASE=false
 - [ ] VITE_SUPABASE_ANON_KEY에 실제 키 입력됨
 - [ ] `.gitignore`에 환경변수 파일 제외됨
 
-**트러블슈팅**:
+**주의사항**:
 > **Q: 환경변수가 인식이 안 돼요**
 > A: Vite는 `VITE_` 접두사가 있는 변수만 클라이언트에 노출합니다.
 > 개발 서버를 재시작하세요: `pnpm dev` 중지 후 다시 실행
@@ -274,7 +274,7 @@ Supabase MCP로 현재 테이블 목록을 조회해줘
 - [ ] `/mcp`에서 supabase가 `✓ connected` 표시
 - [ ] `list_tables` 실행 시 에러 없이 결과 반환
 
-**트러블슈팅**:
+**주의사항**:
 
 | 증상 | 원인 | 해결 |
 |------|------|------|
@@ -324,30 +324,12 @@ Phase 1로 넘어가기 전 확인:
 
 #### 🔧 DB 작업
 
-**Claude Code에서 요청**:
+**프롬프트**:
 ```
-Supabase MCP로 다음 SQL을 마이그레이션으로 적용해줘.
-마이그레이션 이름: create_products_simple
-
-CREATE TABLE products (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  title text NOT NULL,
-  lux integer NOT NULL DEFAULT 300,
-  kelvin integer NOT NULL DEFAULT 4000,
-  price integer DEFAULT 0,
-  is_active boolean DEFAULT true,
-  created_at timestamptz DEFAULT now()
-);
-
--- RLS는 Phase 4에서 활성화
-ALTER TABLE products DISABLE ROW LEVEL SECURITY;
-```
-
-**MCP 내부 동작**:
-```
-mcp__supabase__apply_migration
-├── name: "create_products_simple"
-└── query: "CREATE TABLE products (...)"
+@docs/supabase/data-model.md 의 products 테이블 정의를 참고해서
+Supabase MCP로 제품 테이블을 생성해줘.
+기본 필드(제품명, lux, kelvin, 가격, 활성 상태)만 포함하고,
+RLS는 비활성화 상태로 시작해줘.
 ```
 
 **예상 결과**: 마이그레이션 성공 메시지
@@ -367,7 +349,7 @@ mcp__supabase__apply_migration
 - [ ] apply_migration 성공
 - [ ] "마이그레이션 목록 조회해줘" 요청 시 `create_products_simple` 표시
 
-**트러블슈팅**:
+**주의사항**:
 > **Q: "permission denied" 에러**
 > A: MCP OAuth 인증 만료. `/mcp` > supabase 선택 > 재인증
 
@@ -379,20 +361,14 @@ mcp__supabase__apply_migration
 
 #### 🔧 DB 작업
 
-**2-1. 테스트 데이터 삽입**
-
-Claude Code에서 요청:
+**프롬프트 (테스트 데이터 삽입)**:
 ```
-Supabase MCP로 다음 SQL을 실행해줘:
-
-INSERT INTO products (title, lux, kelvin, price) VALUES
-  ('Aurora Pendant', 480, 4400, 890000),
-  ('Ember Floor Lamp', 260, 3200, 650000),
-  ('Zenith Desk Light', 350, 5000, 420000);
+@docs/supabase/data-model.md 의 products 테이블 구조를 참고해서
+테스트용 제품 3개를 추가해줘.
+제품명, lux, kelvin, 가격 값을 적절히 넣어줘.
 ```
 
-**2-2. 데이터 확인**
-
+**프롬프트 (데이터 확인)**:
 ```
 products 테이블 전체 데이터 조회해줘
 ```
@@ -435,13 +411,13 @@ pnpm dev
 - [ ] 조회 시 3개 제품 데이터 반환
 - [ ] 브라우저에서 제품 카드 표시 (이미지 없음 - 정상)
 
-**트러블슈팅**:
+**주의사항**:
 > **Q: 화면에 데이터가 안 보여요**
 > A:
 > 1. `.env.local`의 `VITE_USE_SUPABASE=true` 확인
-> 2. 개발 서버 재시작 확인
+> 2. 개발 서버 재시작 (`pnpm dev` 중지 후 다시 실행)
 > 3. 브라우저 콘솔에서 에러 메시지 확인
-> 4. `src/sections/ProductShowcase.jsx`에서 API 호출 코드 확인
+> 4. 상세: [troubleshooting.md A-2](./supabase/troubleshooting.md#a-2-로그인-무한-로딩)
 
 ---
 
@@ -456,7 +432,17 @@ pnpm dev
 
 #### ⚙️ 로직 작업
 
-**3-1. Supabase 클라이언트 생성**
+**프롬프트 (Supabase 연동 파일 생성)**:
+```
+Supabase 클라이언트 파일(src/lib/supabase.js)과
+제품 데이터를 가져오는 서비스(src/services/productService.js)를 만들어줘.
+ProductContext도 만들어서 앱 전체에서 제품 데이터를 사용할 수 있게 해줘.
+App.jsx에서 ProductProvider로 전체 앱을 감싸줘.
+```
+
+---
+
+**참고 코드 (Supabase 클라이언트)**:
 
 `src/lib/supabase.js` 파일 생성:
 
@@ -613,12 +599,15 @@ function ProductShowcase() {
 - [ ] App.jsx에서 ProductProvider로 감싸기 완료
 - [ ] 브라우저에서 제품 데이터 표시 확인
 
-**트러블슈팅**:
+**주의사항**:
 > **Q: "useProduct must be used within ProductProvider" 에러**
 > A: App.jsx에서 ProductProvider가 라우트를 감싸고 있는지 확인
 
-> **Q: 제품이 로드되지 않음**
-> A: 브라우저 콘솔에서 네트워크 에러 확인. CORS나 API 키 문제일 수 있음
+> **Q: 제품이 로드되지 않음 (무한 로딩)**
+> A:
+> 1. 브라우저 콘솔에서 네트워크 에러 확인
+> 2. Vite HMR로 인한 클라이언트 중복 생성 가능성 → `supabase.js`에 싱글톤 패턴 적용 권장
+> 3. 상세: [troubleshooting.md B-2](./supabase/troubleshooting.md#b-2-간헐적-promise-hanging)
 
 ---
 
@@ -628,7 +617,17 @@ function ProductShowcase() {
 
 #### ⚙️ 로직 작업
 
-**4-1. Admin 라우트 설정**
+**프롬프트 (Admin 라우트 및 목록 페이지)**:
+```
+@docs/supabase/information-architecture.md 의 Admin Site Map을 참고해서
+Admin 레이아웃(사이드바, 헤더)과 제품 목록 페이지를 만들어줘.
+/admin/products 경로로 접근 가능하도록 라우트 설정도 해줘.
+Phase 4 전까지는 인증 없이 접근 가능하도록 해줘.
+```
+
+---
+
+**참고 (Admin 라우트 설정)**:
 
 Phase 4 전까지 인증 없이 Admin 페이지에 접근할 수 있도록 설정.
 
@@ -682,7 +681,7 @@ function App() {
 - [ ] 3개 제품이 테이블에 표시
 - [ ] 사이드바 메뉴 표시 (제품관리, 주문관리, 옵션설정)
 
-**트러블슈팅**:
+**주의사항**:
 > **Q: /admin 경로가 404**
 > A: `src/App.jsx`에서 admin 라우트 설정 확인
 
@@ -703,27 +702,23 @@ function App() {
 
 #### 🔧 DB 작업
 
-**5-1. products 테이블 필드 확장**
-
-Claude Code에서 요청:
+**프롬프트 (필드 확장)**:
 ```
-Supabase MCP로 다음 마이그레이션을 적용해줘.
-마이그레이션 이름: add_product_fields
-
-ALTER TABLE products
-ADD COLUMN description text,
-ADD COLUMN day_image_url text,
-ADD COLUMN night_image_url text,
-ADD COLUMN video_url text,
-ADD COLUMN sort_order integer DEFAULT 0,
-ADD COLUMN updated_at timestamptz DEFAULT now();
+@docs/supabase/data-model.md 의 products 테이블 정의를 참고해서
+products 테이블에 추가 필드를 넣어줘.
+설명, 낮/밤 이미지 URL, 비디오 URL, 정렬 순서, 수정일시 필드를 추가해줘.
 ```
 
 ---
 
 #### 🎨 UI 작업
 
-**5-2. 제품 수정 페이지 구현**
+**프롬프트 (제품 수정 페이지)**:
+```
+@docs/supabase/information-architecture.md 의 Product Edit Page 스펙을 참고해서
+/admin/products/:id 페이지를 만들어줘.
+제품 정보를 수정하고 저장할 수 있는 폼을 구현해줘.
+```
 
 | 스토리북 | 확인 내용 |
 |----------|----------|
@@ -776,28 +771,23 @@ Supabase Dashboard > Storage > New Bucket:
 | `product-images` | ✓ Yes | 제품 이미지 |
 | `product-videos` | ✓ Yes | 제품 비디오 |
 
-**6-2. Storage 정책 설정 (MCP)**
-
+**프롬프트 (Storage 정책 설정)**:
 ```
-Supabase MCP로 다음 마이그레이션을 적용해줘.
-마이그레이션 이름: create_storage_policies
-
--- 이미지 버킷: 누구나 읽기 가능
-CREATE POLICY "Public read access for product-images"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'product-images');
-
--- 비디오 버킷: 누구나 읽기 가능
-CREATE POLICY "Public read access for product-videos"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'product-videos');
+@docs/supabase/data-model.md 의 Storage 버킷 정의를 참고해서
+product-images, product-videos 버킷에 공개 읽기 정책을 설정해줘.
+누구나 제품 이미지와 비디오를 볼 수 있도록 해줘.
 ```
 
 ---
 
 #### 🎨 UI 작업
 
-**6-3. 업로드 UI 구현**
+**프롬프트 (이미지 업로드 기능)**:
+```
+제품 수정 페이지에 이미지 업로드 기능을 추가해줘.
+product-images 버킷에 파일을 업로드하고,
+업로드된 URL을 제품의 day_image_url, night_image_url 필드에 저장해줘.
+```
 
 | 스토리북 | 확인 내용 |
 |----------|----------|
@@ -825,58 +815,19 @@ USING (bucket_id = 'product-videos');
 
 #### 🔧 DB 작업
 
-**7-1. product_types 테이블 생성**
-
+**프롬프트 (제품 타입 테이블)**:
 ```
-Supabase MCP로 다음 마이그레이션을 적용해줘.
-마이그레이션 이름: create_product_types
-
-CREATE TABLE product_types (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  value text UNIQUE NOT NULL,
-  label text NOT NULL,
-  sort_order integer DEFAULT 0
-);
-
--- 초기 데이터
-INSERT INTO product_types (value, label, sort_order) VALUES
-  ('ceiling', 'Ceiling', 1),
-  ('stand', 'Stand', 2),
-  ('wall', 'Wall', 3),
-  ('desk', 'Desk', 4);
-
--- products에 FK 추가
-ALTER TABLE products ADD COLUMN type_id uuid REFERENCES product_types(id);
-
--- RLS 비활성화 (Phase 4에서 활성화)
-ALTER TABLE product_types DISABLE ROW LEVEL SECURITY;
+@docs/supabase/data-model.md 의 product_types 테이블 정의를 참고해서
+제품 타입 테이블을 생성해줘.
+Ceiling, Stand, Wall, Desk 타입을 초기 데이터로 넣고,
+products 테이블에서 타입을 참조할 수 있도록 연결해줘.
 ```
 
-**7-2. product_options 테이블 생성**
-
+**프롬프트 (제품 옵션 테이블)**:
 ```
-Supabase MCP로 다음 마이그레이션을 적용해줘.
-마이그레이션 이름: create_product_options
-
-CREATE TABLE product_options (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  category text NOT NULL,
-  value text NOT NULL,
-  label text NOT NULL,
-  sort_order integer DEFAULT 0,
-  UNIQUE(category, value)
-);
-
--- 초기 데이터
-INSERT INTO product_options (category, value, label, sort_order) VALUES
-  ('glass_finish', 'clear', 'Clear Glass', 1),
-  ('glass_finish', 'frosted', 'Frosted Glass', 2),
-  ('glass_finish', 'opaline', 'Opaline Glass', 3),
-  ('hardware', 'patina-brass', 'Patina Brass', 1),
-  ('hardware', 'polished-brass', 'Polished Brass', 2),
-  ('hardware', 'matte-black', 'Matte Black', 3);
-
-ALTER TABLE product_options DISABLE ROW LEVEL SECURITY;
+@docs/supabase/data-model.md 의 product_options 테이블 정의를 참고해서
+제품 옵션 테이블을 생성해줘.
+유리 마감(Clear, Frosted, Opaline)과 하드웨어(Brass, Black) 옵션을 초기 데이터로 넣어줘.
 ```
 
 ---
@@ -916,76 +867,15 @@ ALTER TABLE product_options DISABLE ROW LEVEL SECURITY;
 
 #### 🔧 DB 작업
 
-**8-1. 주문 관련 테이블 생성**
-
+**프롬프트 (주문 관련 테이블)**:
 ```
-Supabase MCP로 다음 마이그레이션을 적용해줘.
-마이그레이션 이름: create_order_tables
+@docs/supabase/data-model.md 의 주문 관련 테이블 정의를 참고해서
+Supabase MCP로 다음 테이블들을 생성해줘:
+1. order_statuses - 주문 상태 (대기, 확인, 배송중, 완료, 취소)
+2. orders - 주문 정보 (고객 정보, 배송지, 금액)
+3. order_items - 주문 항목 (주문에 포함된 제품들)
 
--- 주문 상태 테이블
-CREATE TABLE order_statuses (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  value text UNIQUE NOT NULL,
-  label_en text NOT NULL,
-  label_ko text NOT NULL,
-  color text NOT NULL,
-  sort_order integer DEFAULT 0
-);
-
-INSERT INTO order_statuses (value, label_en, label_ko, color, sort_order) VALUES
-  ('pending', 'Pending', '주문 대기', 'warning', 1),
-  ('confirmed', 'Confirmed', '주문 확인', 'info', 2),
-  ('shipped', 'Shipped', '배송 중', 'primary', 3),
-  ('delivered', 'Delivered', '배송 완료', 'success', 4),
-  ('cancelled', 'Cancelled', '주문 취소', 'error', 5);
-
--- 주문 테이블
-CREATE TABLE orders (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_number text UNIQUE,
-  status_id uuid REFERENCES order_statuses(id),
-  email text NOT NULL,
-  first_name text NOT NULL,
-  last_name text NOT NULL,
-  phone text,
-  company text,
-  country text DEFAULT 'KR',
-  city text,
-  address text,
-  apartment text,
-  zip_code text,
-  subtotal integer DEFAULT 0,
-  shipping_cost integer DEFAULT 0,
-  discount integer DEFAULT 0,
-  total integer DEFAULT 0,
-  currency text DEFAULT 'KRW',
-  confirmed_at timestamptz,
-  shipped_at timestamptz,
-  delivered_at timestamptz,
-  cancelled_at timestamptz,
-  created_at timestamptz DEFAULT now()
-);
-
--- 주문 항목 테이블
-CREATE TABLE order_items (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id uuid REFERENCES orders(id) ON DELETE CASCADE,
-  product_id uuid REFERENCES products(id),
-  product_title text NOT NULL,
-  product_lux integer,
-  product_kelvin integer,
-  product_image_url text,
-  options jsonb DEFAULT '{}',
-  quantity integer NOT NULL DEFAULT 1,
-  unit_price integer NOT NULL,
-  line_total integer NOT NULL,
-  created_at timestamptz DEFAULT now()
-);
-
--- RLS 비활성화 (Phase 4에서 활성화)
-ALTER TABLE order_statuses DISABLE ROW LEVEL SECURITY;
-ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
-ALTER TABLE order_items DISABLE ROW LEVEL SECURITY;
+주문 상태 초기 데이터도 넣어줘.
 ```
 
 ---
@@ -1017,30 +907,24 @@ ALTER TABLE order_items DISABLE ROW LEVEL SECURITY;
 
 #### 🔧 DB 작업
 
-**9-1. View 생성**
-
+**프롬프트 (주문 조회용 View)**:
 ```
-Supabase MCP로 다음 마이그레이션을 적용해줘.
-마이그레이션 이름: create_order_views
-
-CREATE OR REPLACE VIEW orders_with_status
-WITH (security_invoker = true) AS
-SELECT
-  o.*,
-  s.value as status_value,
-  s.label_en as status_label_en,
-  s.label_ko as status_label_ko,
-  s.color as status_color,
-  (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as items_count
-FROM orders o
-LEFT JOIN order_statuses s ON o.status_id = s.id;
+@docs/supabase/data-model.md 의 orders_with_status View 정의를 참고해서
+주문 목록 조회용 View를 만들어줘.
+주문 정보에 상태 라벨, 색상, 주문 항목 수가 함께 조회되도록 해줘.
 ```
 
 ---
 
 #### 🎨 UI 작업
 
-**9-2. 주문 페이지 구현**
+**프롬프트 (주문 목록/상세 페이지)**:
+```
+@docs/supabase/information-architecture.md 의 Admin Site Map을 참고해서
+주문 목록 페이지(/admin/orders)와 상세 페이지(/admin/orders/:id)를 만들어줘.
+목록은 테이블로 보여주고, 상태별로 색상 Chip을 표시해줘.
+상세 페이지에서는 주문 정보, 주문 항목, 상태 타임라인을 보여줘.
+```
 
 | 스토리북 | 확인 내용 |
 |----------|----------|
@@ -1077,16 +961,25 @@ LEFT JOIN order_statuses s ON o.status_id = s.id;
 
 #### ⚙️ 로직 작업
 
-**10-1. 상태 변경 API 구현**
-
-- 상태 전환 규칙 검증
-- 해당 타임스탬프 기록 (confirmed_at, shipped_at 등)
+**프롬프트 (상태 변경 로직)**:
+```
+주문 상태를 변경하는 기능을 구현해줘.
+orderService.js에 updateOrderStatus 함수를 만들어서:
+- 현재 상태에서 가능한 다음 상태만 선택 가능하도록 검증
+- 상태 변경 시 해당 타임스탬프 자동 기록 (confirmed_at, shipped_at 등)
+```
 
 ---
 
 #### 🎨 UI 작업
 
-**10-2. 상태 변경 UI 구현**
+**프롬프트 (상태 변경 UI)**:
+```
+주문 상세 페이지에 상태 변경 UI를 추가해줘.
+현재 상태에서 가능한 다음 상태만 드롭다운에 표시하고,
+"상태 변경" 버튼 클릭 시 업데이트되도록 해줘.
+상태 변경 이력은 Stepper로 타임라인 형태로 보여줘.
+```
 
 | 스토리북 | 확인 내용 |
 |----------|----------|
@@ -1116,39 +1009,23 @@ LEFT JOIN order_statuses s ON o.status_id = s.id;
 
 #### 🔧 DB 작업
 
-**11-1. Admin 프로필 테이블 생성**
-
+**프롬프트 (관리자 프로필 테이블)**:
 ```
-Supabase MCP로 다음 마이그레이션을 적용해줘.
-마이그레이션 이름: create_admin_profiles
-
-CREATE TABLE admin_profiles (
-  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email text NOT NULL,
-  display_name text,
-  role text DEFAULT 'admin',
-  created_at timestamptz DEFAULT now()
-);
-
-ALTER TABLE admin_profiles DISABLE ROW LEVEL SECURITY;
+@docs/supabase/data-model.md 의 admin_profiles 테이블 정의를 참고해서
+관리자 프로필 테이블을 생성해줘.
+Supabase Auth 사용자와 연결되도록 해줘.
 ```
 
-**11-2. Supabase Dashboard에서 사용자 생성**
-
+**Dashboard 작업 (사용자 생성)**:
 1. Dashboard > Authentication > Users
 2. **"Add user"** 클릭
 3. 이메일/비밀번호 입력
 4. **"Auto Confirm User"** 체크 (개발용)
 
-**11-3. admin_profiles에 레코드 추가**
-
+**프롬프트 (관리자 등록)**:
 ```
-Supabase MCP로 다음 SQL 실행해줘:
-
-INSERT INTO admin_profiles (id, email, display_name, role)
-SELECT id, email, '관리자', 'super_admin'
-FROM auth.users
-WHERE email = 'your-admin@email.com';
+방금 Dashboard에서 만든 사용자를 admin_profiles 테이블에 등록해줘.
+이메일이 'your-admin@email.com'인 사용자를 super_admin 역할로 추가해줘.
 ```
 
 ---
@@ -1174,17 +1051,25 @@ WHERE email = 'your-admin@email.com';
 
 #### ⚙️ 로직 작업
 
-**12-1. Auth Context 구현**
-
-- Supabase Auth 연동
-- Session 관리
-- 로그인/로그아웃 함수
+**프롬프트 (Auth Context)**:
+```
+Supabase Auth를 사용하는 AuthContext를 만들어줘.
+로그인, 로그아웃, 세션 관리 기능을 포함해줘.
+로그인 성공 시 admin_profiles 테이블에서 관리자 정보를 확인해줘.
+```
 
 ---
 
 #### 🎨 UI 작업
 
-**12-2. 로그인 페이지 구현**
+**프롬프트 (로그인 페이지)**:
+```
+@docs/supabase/information-architecture.md 의 Admin Site Map을 참고해서
+/admin/login 로그인 페이지를 만들어줘.
+이메일과 비밀번호 입력 필드, 로그인 버튼을 포함하고,
+로그인 성공 시 /admin/products로 이동해줘.
+에러 발생 시 메시지를 표시해줘.
+```
 
 | 스토리북 | 확인 내용 |
 |----------|----------|
@@ -1217,59 +1102,27 @@ WHERE email = 'your-admin@email.com';
 
 #### 🔧 DB 작업
 
-**13-1. is_admin() 함수 생성**
-
+**프롬프트 (관리자 확인 함수)**:
 ```
-Supabase MCP로 다음 마이그레이션을 적용해줘.
-마이그레이션 이름: create_is_admin_function
-
-CREATE OR REPLACE FUNCTION is_admin()
-RETURNS boolean AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM admin_profiles
-    WHERE id = auth.uid()
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+@docs/supabase/information-architecture.md 의 권한 정의를 참고해서
+현재 로그인한 사용자가 관리자인지 확인하는 함수를 만들어줘.
+admin_profiles 테이블에 등록된 사용자면 관리자로 판단해줘.
 ```
 
-**13-2. products 테이블 RLS 활성화**
-
+**프롬프트 (제품 테이블 보안 정책)**:
 ```
-Supabase MCP로 다음 마이그레이션을 적용해줘.
-마이그레이션 이름: enable_rls_products
-
--- RLS 활성화
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-
--- 누구나 활성 제품 조회 가능
-CREATE POLICY "products_select_public" ON products
-  FOR SELECT USING (is_active = true);
-
--- Admin만 모든 제품 조회
-CREATE POLICY "products_select_admin" ON products
-  FOR SELECT USING (is_admin());
-
--- Admin만 생성/수정/삭제
-CREATE POLICY "products_insert_admin" ON products
-  FOR INSERT WITH CHECK (is_admin());
-
-CREATE POLICY "products_update_admin" ON products
-  FOR UPDATE USING (is_admin());
-
-CREATE POLICY "products_delete_admin" ON products
-  FOR DELETE USING (is_admin());
+@docs/supabase/information-architecture.md 의 권한 정의를 참고해서
+products 테이블에 보안 정책을 적용해줘:
+- 누구나: 활성 제품 조회 가능
+- 관리자만: 모든 제품 조회, 생성, 수정, 삭제 가능
 ```
 
-**13-3. 다른 테이블들도 동일하게 적용**
-
-- product_types
-- product_options
-- order_statuses
-- orders
-- order_items
-- admin_profiles
+**프롬프트 (나머지 테이블 보안 정책)**:
+```
+product_types, product_options, orders, order_items, admin_profiles 테이블에도
+동일한 패턴으로 보안 정책을 적용해줘.
+관리자만 접근 가능하도록 해줘.
+```
 
 ---
 
@@ -1287,11 +1140,14 @@ CREATE POLICY "products_delete_admin" ON products
 
 #### ⚙️ 로직 작업
 
-**14-1. Protected Route 구현**
-
-- 인증 상태 확인
-- 미인증 시 로그인 페이지로 리다이렉트
-- 세션 만료 감지
+**프롬프트 (Protected Route)**:
+```
+인증이 필요한 Admin 페이지들을 보호하는 ProtectedRoute 컴포넌트를 만들어줘.
+AuthContext를 사용해서:
+- 미로그인 시 /admin/login으로 리다이렉트
+- 로딩 중에는 스피너 표시
+- 세션 만료 시 자동 로그아웃
+```
 
 ---
 
@@ -1347,31 +1203,31 @@ CREATE POLICY "products_delete_admin" ON products
 
 ---
 
-## 트러블슈팅 공통
+## 주의사항 (자주 발생하는 문제)
 
-### Phase 0 (환경 설정)
+> 상세한 해결 방법은 [troubleshooting.md](./supabase/troubleshooting.md) 참조
 
-| 증상 | 원인 | 해결 |
-|------|------|------|
-| MCP 도구가 안 보임 | 연결 안 됨 | Step 0-5 다시 실행, Claude Code 재시작 |
-| OAuth 인증 실패 | 브라우저 팝업 차단 | 팝업 허용, 다른 브라우저 시도 |
-| "Invalid project ref" | Project ID 오류 | Dashboard > Settings > General에서 정확한 ID 확인 |
-
-### Phase 1-3 (DB 작업)
+### A. 인증 및 권한
 
 | 증상 | 원인 | 해결 |
 |------|------|------|
-| apply_migration 실패 | SQL 문법 오류 | 에러 메시지 확인, 문법 수정 |
-| execute_sql 실패 | RLS 차단 | RLS 비활성화 확인 |
-| 데이터가 화면에 안 보임 | 환경변수 미설정 | `.env.local` 확인, 서버 재시작 |
+| 제품 CRUD 시 403 Forbidden | `is_admin()` 함수의 role 값 불일치 | `admin_profiles.role`을 `'admin'`으로 수정하거나, 함수에 `'super_admin'` 추가 |
+| 로그인 페이지 무한 로딩 | 로컬 스토리지의 `sb-*` 토큰 손상 | 개발자 도구 > Local Storage에서 `sb-` 키 삭제 |
+| 환경변수 미인식 | `.env` 파일 미설정 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` 확인 |
 
-### Phase 4 (인증/보안)
+### B. 데이터 로딩
 
 | 증상 | 원인 | 해결 |
 |------|------|------|
-| 로그인 안 됨 | Auth 설정 오류 | Dashboard > Authentication 확인 |
-| RLS 403 에러 | 정책 미적용 | is_admin() 함수, 정책 확인 |
-| 세션 유지 안 됨 | 토큰 만료 | autoRefreshToken 설정 확인 |
+| 메인 페이지만 무한 로딩 (어드민은 정상) | Supabase 컬럼명과 컴포넌트 props 불일치 | `ProductContext`에서 데이터 변환 로직 적용 (`type_value → type`, `[day_image, night_image] → images`) |
+| 간헐적 무한 로딩 (새로고침하면 됨) | Vite HMR로 Supabase 클라이언트 중복 생성 | `supabase.js`에 싱글톤 패턴 적용 (`window.__supabase` 캐싱) |
+
+### C. React 생명주기
+
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| `Executing query...` 후 응답 없음 | Auth/API 동시 초기화 충돌 | `AuthProvider`를 Admin 라우트(`/admin/*`)에만 적용 |
+| Strict Mode에서 `AbortError` | useEffect 두 번 실행으로 첫 요청 abort | Context 레벨에서는 AbortController 대신 `fetchingRef` + 데이터 체크 사용 |
 
 ---
 
