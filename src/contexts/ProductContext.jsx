@@ -64,20 +64,22 @@ export function ProductProvider({ children }) {
       return;
     }
 
-    // 타임아웃 설정 (8초)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    // 타임아웃 Promise (5초) - AbortController 대신 Promise.race 사용
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Supabase request timeout (5s)')), 5000);
+    });
 
     try {
-      const { data, error: fetchError } = await getProducts({
-        isActive: true,
-        sortBy: 'sort_order',
-        ascending: true,
-        limit: 100,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
+      // Supabase 요청과 타임아웃 경쟁
+      const { data, error: fetchError } = await Promise.race([
+        getProducts({
+          isActive: true,
+          sortBy: 'sort_order',
+          ascending: true,
+          limit: 100,
+        }),
+        timeoutPromise,
+      ]);
 
       console.log('[ProductContext] getProducts returned:', { dataLength: data?.length, error: fetchError?.message });
 
@@ -109,7 +111,6 @@ export function ProductProvider({ children }) {
         setProducts(localProducts);
       }
     } catch (err) {
-      clearTimeout(timeoutId);
       console.error('[ProductContext] Unexpected error:', err);
       setError(err?.message || 'Unexpected error');
       // 에러 시 로컬 데이터로 fallback
@@ -129,12 +130,15 @@ export function ProductProvider({ children }) {
 
   /**
    * ID로 제품 조회
-   * @param {string} id - 제품 UUID
+   * @param {string|number} id - 제품 UUID 또는 숫자 ID
    * @returns {Object|null} 제품 데이터 또는 null
    */
   const getProductById = useCallback(
     (id) => {
-      return products.find((product) => product.id === id) || null;
+      // 문자열과 숫자 ID 모두 지원 (로컬 데이터는 숫자, Supabase는 UUID)
+      return products.find((product) =>
+        String(product.id) === String(id)
+      ) || null;
     },
     [products]
   );
