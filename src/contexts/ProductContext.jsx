@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { isSupabaseEnabled } from '../lib/supabase';
 import { getProducts } from '../services/productService';
+import { products as localProducts } from '../data/products';
 
 /**
  * ProductContext
@@ -9,6 +11,7 @@ import { getProducts } from '../services/productService';
  * 1. 앱 시작 시 전체 제품 데이터를 1회 로드
  * 2. Context에 캐싱하여 모든 컴포넌트에서 재사용
  * 3. 세션 유지되는 동안 재호출 없음
+ * 4. Supabase 비활성화 시 로컬 데이터 즉시 반환
  *
  * 사용처:
  * - ProductShowcase: 전체 제품 목록 표시
@@ -34,31 +37,36 @@ export function ProductProvider({ children }) {
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const fetchingRef = useRef(false);
+  const hasFetchedRef = useRef(false);
 
   /**
    * 제품 데이터 로드
    * Supabase에서 활성화된 제품만 가져와서 변환
+   * Supabase 비활성화 시 로컬 데이터 즉시 반환
    */
-  const loadProducts = useCallback(async () => {
-    // 이미 데이터가 있으면 재호출 방지
-    if (products.length > 0) {
-      console.log('[ProductContext] Already has products, skip');
+  const loadProducts = useCallback(async (force = false) => {
+    // 이미 fetch 완료된 경우 재호출 방지 (force가 아닌 경우)
+    if (hasFetchedRef.current && !force) {
+      console.log('[ProductContext] Already fetched, skip');
+      return;
+    }
+
+    hasFetchedRef.current = true;
+    console.log('[ProductContext] Starting product fetch...');
+    setIsLoading(true);
+    setError(null);
+
+    // Supabase 비활성화 시 로컬 데이터 즉시 반환
+    if (!isSupabaseEnabled()) {
+      console.log('[ProductContext] Supabase not enabled, using local data');
+      setProducts(localProducts);
       setIsLoading(false);
       return;
     }
 
-    // Strict Mode 중복 호출 방지
-    if (fetchingRef.current) {
-      console.log('[ProductContext] Already fetching, skip');
-      return;
-    }
-
-    fetchingRef.current = true;
-
-    console.log('[ProductContext] Starting product fetch...');
-    setIsLoading(true);
-    setError(null);
+    // 타임아웃 설정 (8초)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     try {
       const { data, error: fetchError } = await getProducts({
@@ -66,18 +74,23 @@ export function ProductProvider({ children }) {
         sortBy: 'sort_order',
         ascending: true,
         limit: 100,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       console.log('[ProductContext] getProducts returned:', { dataLength: data?.length, error: fetchError?.message });
 
       if (fetchError) {
         console.error('[ProductContext] Fetch error:', fetchError);
         setError(fetchError?.message || 'Failed to load products');
-        setProducts([]);
-      } else {
-        console.log('[ProductContext] Fetch success, products:', data?.length || 0);
+        // 에러 시 로컬 데이터로 fallback
+        console.log('[ProductContext] Falling back to local data');
+        setProducts(localProducts);
+      } else if (data && data.length > 0) {
+        console.log('[ProductContext] Fetch success, products:', data.length);
         // Supabase 데이터를 컴포넌트 형식으로 변환
-        const transformedProducts = (data || []).map((product) => ({
+        const transformedProducts = data.map((product) => ({
           id: product.id,
           title: product.title,
           type: product.type_value,
@@ -90,16 +103,22 @@ export function ProductProvider({ children }) {
         }));
         setProducts(transformedProducts);
         setError(null);
+      } else {
+        // 빈 데이터인 경우 로컬 fallback
+        console.log('[ProductContext] Empty data, using local data');
+        setProducts(localProducts);
       }
     } catch (err) {
+      clearTimeout(timeoutId);
       console.error('[ProductContext] Unexpected error:', err);
       setError(err?.message || 'Unexpected error');
-      setProducts([]);
+      // 에러 시 로컬 데이터로 fallback
+      console.log('[ProductContext] Falling back to local data');
+      setProducts(localProducts);
     } finally {
       setIsLoading(false);
-      fetchingRef.current = false;
     }
-  }, [products.length]);
+  }, []); // 의존성 제거 - 최초 1회만 실행
 
   /**
    * 최초 마운트 시 제품 데이터 로드
@@ -120,12 +139,20 @@ export function ProductProvider({ children }) {
     [products]
   );
 
+  /**
+   * 강제 refetch (force = true)
+   */
+  const refetch = useCallback(() => {
+    hasFetchedRef.current = false;
+    return loadProducts(true);
+  }, [loadProducts]);
+
   const value = {
     products,
     isLoading,
     error,
     getProductById,
-    refetch: loadProducts,
+    refetch,
   };
 
   return (
