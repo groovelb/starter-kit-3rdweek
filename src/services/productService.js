@@ -221,12 +221,21 @@ export const updateProduct = async (id, updates) => {
 };
 
 /**
- * 제품 삭제 (Soft delete - is_active = false)
+ * 제품 삭제 (Hard delete - DB에서 완전 삭제)
  * @param {string} id - 제품 UUID
  * @returns {Promise<{data: Object|null, error: Error|null}>}
  */
 export const deleteProduct = async (id) => {
-  return updateProduct(id, { is_active: false });
+  if (!isSupabaseEnabled()) {
+    return { data: null, error: new Error('Supabase is not enabled') };
+  }
+
+  const { data, error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', id);
+
+  return { data, error };
 };
 
 /**
@@ -289,15 +298,91 @@ export const uploadProductVideo = async (file, productId) => {
 };
 
 /**
+ * 로컬 이미지 URL을 Blob으로 변환
+ * @param {string} url - 로컬 이미지 URL (Vite에서 제공하는 경로)
+ * @returns {Promise<{blob: Blob|null, ext: string}>}
+ */
+const fetchLocalAsset = async (url) => {
+  if (!url) {
+    console.log('[fetchLocalAsset] No URL provided');
+    return { blob: null, ext: '' };
+  }
+
+  console.log('[fetchLocalAsset] Fetching:', url);
+
+  try {
+    const response = await fetch(url);
+    console.log('[fetchLocalAsset] Response status:', response.status);
+
+    if (!response.ok) throw new Error(`Failed to fetch: ${url} (status: ${response.status})`);
+
+    const blob = await response.blob();
+    console.log('[fetchLocalAsset] Blob size:', blob.size, 'bytes');
+
+    // URL에서 확장자 추출 (예: /assets/1.png -> png)
+    const ext = url.split('.').pop()?.split('?')[0] || 'png';
+
+    return { blob, ext };
+  } catch (err) {
+    console.error('[fetchLocalAsset] Failed to fetch asset:', url, err);
+    return { blob: null, ext: '' };
+  }
+};
+
+/**
+ * Blob을 Storage에 업로드하고 public URL 반환
+ * @param {Blob} blob - 파일 Blob
+ * @param {string} bucket - Storage bucket 이름
+ * @param {string} filePath - 저장 경로
+ * @returns {Promise<string|null>} public URL 또는 null
+ */
+const uploadBlobToStorage = async (blob, bucket, filePath) => {
+  if (!blob) {
+    console.log('[uploadBlobToStorage] No blob provided');
+    return null;
+  }
+
+  console.log('[uploadBlobToStorage] Uploading to', bucket, filePath, 'size:', blob.size);
+
+  try {
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(filePath, blob, { upsert: true });
+
+    if (uploadError) {
+      console.error('[uploadBlobToStorage] Upload error:', uploadError);
+      return null;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(filePath);
+
+    console.log('[uploadBlobToStorage] Success:', publicUrl);
+    return publicUrl;
+  } catch (err) {
+    console.error('[uploadBlobToStorage] Exception:', err);
+    return null;
+  }
+};
+
+/**
  * 로컬 제품 데이터 일괄 업로드 (Admin 권한 필요)
  * products.js의 데이터를 Supabase에 일괄 등록
+ * 이미지/비디오를 Storage에 업로드 후 URL을 제품 테이블에 저장
  *
  * @param {Array} localProducts - 로컬 제품 데이터 배열
  * @param {Array} productTypes - product_types 테이블 데이터 (value → id 매핑용)
+ * @param {function} onProgress - 진행 상황 콜백 (current, total, status)
  * @returns {Promise<{success: number, failed: number, errors: Array}>}
  */
-export const bulkUploadProducts = async (localProducts, productTypes) => {
+export const bulkUploadProducts = async (localProducts, productTypes, onProgress) => {
+  console.log('[bulkUpload] Starting bulk upload...');
+  console.log('[bulkUpload] Products count:', localProducts.length);
+  console.log('[bulkUpload] Product types:', productTypes);
+
   if (!isSupabaseEnabled()) {
+    console.error('[bulkUpload] Supabase is not enabled');
     return { success: 0, failed: 0, errors: [new Error('Supabase is not enabled')] };
   }
 
@@ -306,39 +391,111 @@ export const bulkUploadProducts = async (localProducts, productTypes) => {
   productTypes.forEach((type) => {
     typeMap[type.value] = type.id;
   });
+  console.log('[bulkUpload] Type map:', typeMap);
 
   const results = { success: 0, failed: 0, errors: [] };
+  const total = localProducts.length;
 
-  for (const product of localProducts) {
+  for (let i = 0; i < localProducts.length; i++) {
+    const product = localProducts[i];
+    console.log(`[bulkUpload] Processing ${i + 1}/${total}: ${product.title}`);
+
     try {
-      // 로컬 데이터를 Supabase 스키마에 맞게 변환
-      const supabaseProduct = {
-        title: product.title,
-        description: product.description || '',
-        type_id: typeMap[product.type] || null,
-        lux: product.lux || 0,
-        kelvin: product.kelvin || 0,
-        price: product.price || null,
-        day_image_url: product.images?.[0] || null,
-        night_image_url: product.images?.[1] || null,
-        video_url: product.video || null,
-        is_active: true,
-        sort_order: product.id || results.success + 1,
-      };
+      onProgress?.(i + 1, total, `${product.title} 처리 중...`);
 
-      const { error } = await supabase
+      // 1. 제품 먼저 생성하여 UUID 획득
+      console.log('[bulkUpload] Step 1: Creating product in DB...');
+      const { data: createdProduct, error: insertError } = await supabase
         .from('products')
-        .insert(supabaseProduct);
+        .insert({
+          title: product.title,
+          description: product.description || '',
+          type_id: typeMap[product.type] || null,
+          lux: product.lux || 0,
+          kelvin: product.kelvin || 0,
+          price: product.price || null,
+          is_active: true,
+          sort_order: product.id || i + 1,
+        })
+        .select('id')
+        .single();
 
-      if (error) {
-        results.failed++;
-        results.errors.push({ product: product.title, error: error.message });
-      } else {
-        results.success++;
+      if (insertError) {
+        console.error('[bulkUpload] Insert error:', insertError);
+        throw new Error(`제품 생성 실패: ${insertError.message}`);
       }
+
+      const productId = createdProduct.id;
+      console.log('[bulkUpload] Product created with ID:', productId);
+
+      // 2. Day 이미지 업로드
+      console.log('[bulkUpload] Step 2: Uploading day image...');
+      let dayImageUrl = null;
+      if (product.images?.[0]) {
+        onProgress?.(i + 1, total, `${product.title} - Day 이미지 업로드 중...`);
+        const { blob, ext } = await fetchLocalAsset(product.images[0]);
+        if (blob) {
+          dayImageUrl = await uploadBlobToStorage(
+            blob,
+            'product-images',
+            `day/${productId}.${ext}`
+          );
+        }
+      }
+      console.log('[bulkUpload] Day image URL:', dayImageUrl);
+
+      // 3. Night 이미지 업로드
+      console.log('[bulkUpload] Step 3: Uploading night image...');
+      let nightImageUrl = null;
+      if (product.images?.[1]) {
+        onProgress?.(i + 1, total, `${product.title} - Night 이미지 업로드 중...`);
+        const { blob, ext } = await fetchLocalAsset(product.images[1]);
+        if (blob) {
+          nightImageUrl = await uploadBlobToStorage(
+            blob,
+            'product-images',
+            `night/${productId}.${ext}`
+          );
+        }
+      }
+      console.log('[bulkUpload] Night image URL:', nightImageUrl);
+
+      // 4. 비디오 업로드
+      console.log('[bulkUpload] Step 4: Uploading video...');
+      let videoUrl = null;
+      if (product.video) {
+        onProgress?.(i + 1, total, `${product.title} - 비디오 업로드 중...`);
+        const { blob, ext } = await fetchLocalAsset(product.video);
+        if (blob) {
+          videoUrl = await uploadBlobToStorage(
+            blob,
+            'product-videos',
+            `${productId}.${ext}`
+          );
+        }
+      }
+      console.log('[bulkUpload] Video URL:', videoUrl);
+
+      // 5. 제품 테이블에 URL 업데이트
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({
+          day_image_url: dayImageUrl,
+          night_image_url: nightImageUrl,
+          video_url: videoUrl,
+        })
+        .eq('id', productId);
+
+      if (updateError) {
+        console.warn('[bulkUpload] URL update warning:', updateError);
+      }
+
+      results.success++;
+      onProgress?.(i + 1, total, `${product.title} 완료`);
     } catch (err) {
       results.failed++;
       results.errors.push({ product: product.title, error: err.message });
+      onProgress?.(i + 1, total, `${product.title} 실패: ${err.message}`);
     }
   }
 

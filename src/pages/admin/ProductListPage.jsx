@@ -68,6 +68,11 @@ function ProductListPage() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, status: '' });
+
+  // 일괄 삭제 다이얼로그
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   /**
    * 제품 타입 목록 로드
@@ -168,13 +173,50 @@ function ProductListPage() {
   };
 
   /**
+   * 선택한 제품 일괄 삭제
+   */
+  const handleBulkDeleteConfirm = async () => {
+    setIsBulkDeleting(true);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const productId of selected) {
+      const { error: deleteError } = await deleteProduct(productId);
+      if (deleteError) {
+        failCount++;
+      } else {
+        successCount++;
+      }
+    }
+
+    setIsBulkDeleting(false);
+    setBulkDeleteDialogOpen(false);
+    setSelected([]);
+
+    if (failCount > 0) {
+      setError(`${successCount}개 삭제 성공, ${failCount}개 실패`);
+    }
+
+    loadProducts();
+  };
+
+  /**
    * 로컬 데이터 일괄 업로드
+   * 이미지/비디오를 Storage에 업로드 후 제품 테이블에 URL 저장
    */
   const handleBulkUpload = async () => {
     setIsUploading(true);
     setUploadResult(null);
+    setUploadProgress({ current: 0, total: localProducts.length, status: '시작 중...' });
 
-    const result = await bulkUploadProducts(localProducts, productTypes);
+    const result = await bulkUploadProducts(
+      localProducts,
+      productTypes,
+      (current, total, status) => {
+        setUploadProgress({ current, total, status });
+      }
+    );
 
     setUploadResult(result);
     setIsUploading(false);
@@ -195,10 +237,30 @@ function ProductListPage() {
           mb: 3,
         }}
       >
-        <Typography variant="h5" fontWeight={600}>
-          제품 관리
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h5" fontWeight={600}>
+            제품 관리
+          </Typography>
+          {selected.length > 0 && (
+            <Chip
+              label={`${selected.length}개 선택됨`}
+              size="small"
+              color="primary"
+              onDelete={() => setSelected([])}
+            />
+          )}
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
+          {selected.length > 0 && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<span className="material-symbols-outlined">delete</span>}
+              onClick={() => setBulkDeleteDialogOpen(true)}
+            >
+              선택 삭제 ({selected.length})
+            </Button>
+          )}
           <Button
             variant="outlined"
             startIcon={<span className="material-symbols-outlined">upload</span>}
@@ -423,7 +485,7 @@ function ProductListPage() {
             "{deleteTarget?.title}" 제품을 삭제하시겠습니까?
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            삭제된 제품은 비활성화 처리됩니다.
+            이 작업은 되돌릴 수 없습니다.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -431,6 +493,41 @@ function ProductListPage() {
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
             삭제
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Delete Dialog */}
+      <Dialog
+        open={bulkDeleteDialogOpen}
+        onClose={() => !isBulkDeleting && setBulkDeleteDialogOpen(false)}
+      >
+        <DialogTitle>선택한 제품 삭제</DialogTitle>
+        <DialogContent>
+          {isBulkDeleting ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+              <CircularProgress size={24} />
+              <Typography>삭제 중...</Typography>
+            </Box>
+          ) : (
+            <>
+              <Typography>
+                선택한 {selected.length}개 제품을 삭제하시겠습니까?
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                이 작업은 되돌릴 수 없습니다.
+              </Typography>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {!isBulkDeleting && (
+            <>
+              <Button onClick={() => setBulkDeleteDialogOpen(false)}>취소</Button>
+              <Button onClick={handleBulkDeleteConfirm} color="error" variant="contained">
+                삭제
+              </Button>
+            </>
+          )}
         </DialogActions>
       </Dialog>
 
@@ -443,19 +540,56 @@ function ProductListPage() {
       >
         <DialogTitle>로컬 데이터 일괄 업로드</DialogTitle>
         <DialogContent>
-          {!uploadResult ? (
+          {!uploadResult && !isUploading ? (
             <>
               <Typography sx={{ mb: 2 }}>
                 <strong>products.js</strong> 파일의 {localProducts.length}개 제품을
                 Supabase에 업로드합니다.
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                • 기존 데이터는 유지됩니다 (중복 생성 가능)
+                • 이미지와 비디오를 Storage에 업로드합니다
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                • 이미지 URL은 로컬 경로 그대로 저장됩니다
+                • 업로드된 URL이 제품 테이블에 저장됩니다
               </Typography>
+              <Typography variant="body2" color="text.secondary">
+                • 기존 데이터는 유지됩니다 (중복 생성 가능)
+              </Typography>
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                파일 크기에 따라 시간이 오래 걸릴 수 있습니다.
+              </Alert>
             </>
+          ) : isUploading ? (
+            <Box sx={{ py: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <CircularProgress size={24} />
+                <Typography>
+                  {uploadProgress.current} / {uploadProgress.total} 제품 처리 중
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  width: '100%',
+                  height: 8,
+                  bgcolor: 'grey.200',
+                  borderRadius: 1,
+                  overflow: 'hidden',
+                  mb: 1,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: `${(uploadProgress.current / uploadProgress.total) * 100}%`,
+                    height: '100%',
+                    bgcolor: 'primary.main',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                {uploadProgress.status}
+              </Typography>
+            </Box>
           ) : (
             <>
               <Alert
@@ -480,23 +614,22 @@ function ProductListPage() {
           )}
         </DialogContent>
         <DialogActions>
-          {!uploadResult ? (
+          {!uploadResult && !isUploading ? (
             <>
-              <Button
-                onClick={() => setUploadDialogOpen(false)}
-                disabled={isUploading}
-              >
+              <Button onClick={() => setUploadDialogOpen(false)}>
                 취소
               </Button>
               <Button
                 onClick={handleBulkUpload}
                 variant="contained"
-                disabled={isUploading}
-                startIcon={isUploading && <CircularProgress size={16} />}
               >
-                {isUploading ? '업로드 중...' : '업로드 시작'}
+                업로드 시작
               </Button>
             </>
+          ) : isUploading ? (
+            <Typography variant="body2" color="text.secondary" sx={{ px: 2 }}>
+              업로드 중에는 창을 닫을 수 없습니다
+            </Typography>
           ) : (
             <Button
               onClick={() => {
