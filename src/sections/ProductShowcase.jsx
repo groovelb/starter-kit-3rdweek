@@ -113,13 +113,13 @@ const ProductShowcase = forwardRef(function ProductShowcase(
         </Box>
       )}
 
-      {/* 에러 상태 (로컬 fallback 사용 중) */}
+      {/* 에러 상태 */}
       {error && !isLoading && (
         <Alert
-          severity="info"
+          severity="error"
           sx={{ mb: 2 }}
         >
-          서버 연결에 실패하여 로컬 데이터를 표시합니다.
+          {error}
         </Alert>
       )}
 
